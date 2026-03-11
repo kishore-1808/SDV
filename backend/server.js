@@ -15,17 +15,29 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 
-// Connect to MongoDB
+// MongoDB connection - optimized for serverless
+let isConnected = false;
+
 const connectDB = async () => {
-  if (mongoose.connection.readyState === 0) {
-    try {
-      await mongoose.connect(process.env.MONGO_URI);
-      console.log('MongoDB Atlas Connected');
-    } catch (error) {
-      console.error('MongoDB connection error:', error.message);
-    }
+  if (isConnected) return;
+  
+  try {
+    await mongoose.connect(process.env.MONGO_URI, {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+    });
+    isConnected = true;
+    console.log('MongoDB Atlas Connected');
+  } catch (error) {
+    console.error('MongoDB connection error:', error.message);
   }
 };
+
+// Middleware to ensure DB connection before routes
+app.use(async (req, res, next) => {
+  await connectDB();
+  next();
+});
 
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/vault', require('./routes/vaultRoutes'));
@@ -38,7 +50,6 @@ app.get('/api/health', (req, res) => {
 // For local development
 const PORT = process.env.PORT || 5000;
 if (process.env.NODE_ENV !== 'production') {
-  connectDB();
   app.listen(PORT, () => {
     console.log(`Secure Data Vault server running on port ${PORT}`);
   });
