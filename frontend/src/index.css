@@ -976,6 +976,15 @@ body {
   font-size: 0.9rem;
 }
 
+.vault-filters select {
+  padding: 0.6rem 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
 /* ===== Modal ===== */
 .modal-overlay {
   position: fixed;
@@ -991,8 +1000,8 @@ body {
 }
 
 .modal {
-  background: var  border: (--bg-card);
-1px solid var(--border);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 2rem;
   max-width: 500px;
