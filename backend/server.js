@@ -15,26 +15,11 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 
-// MongoDB connection - disable buffering for serverless
-mongoose.set('bufferCommands', false);
-mongoose.set('bufferTimeoutMS', 10000);
-
-const connectDB = async () => {
-  if (mongoose.connection.readyState === 0) {
-    try {
-      await mongoose.connect(process.env.MONGO_URI, {
-        serverSelectionTimeoutMS: 10000,
-        socketTimeoutMS: 10000,
-      });
-      console.log('MongoDB Atlas Connected');
-    } catch (error) {
-      console.error('MongoDB connection error:', error.message);
-    }
-  }
-};
-
-// Try to connect immediately
-connectDB().catch(err => console.error('Initial DB connect failed:', err));
+// MongoDB connection
+mongoose.connect(process.env.MONGO_URI, {
+  serverSelectionTimeoutMS: 15000,
+  socketTimeoutMS: 15000,
+}).then(() => console.log('MongoDB Connected')).catch(err => console.error('MongoDB Error:', err.message));
 
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/vault', require('./routes/vaultRoutes'));
@@ -44,13 +29,9 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'Secure Data Vault API is running', timestamp: new Date().toISOString() });
 });
 
-// For local development
 const PORT = process.env.PORT || 5000;
 if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => {
-    console.log(`Secure Data Vault server running on port ${PORT}`);
-  });
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 }
 
-// Export for Vercel
 module.exports = app;
