@@ -16,6 +16,15 @@ const vaultItemSchema = new mongoose.Schema({
     enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'],
     required: true
   },
+  fileType: {
+    type: String,
+    enum: ['text', 'pdf'],
+    default: 'text'
+  },
+  originalFileName: {
+    type: String,
+    default: null
+  },
   encryptedData: {
     type: String,
     required: true
@@ -39,6 +48,7 @@ const vaultItemSchema = new mongoose.Schema({
   },
   metadata: {
     originalSize: Number,
+    mimeType: String,
     encryptedAt: { type: Date, default: Date.now },
     contextSnapshot: {
       role: String,

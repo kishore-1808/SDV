@@ -1,4 +1,5 @@
 const express = require('express');
+const multer = require('multer');
 const VaultItem = require('../models/VaultItem');
 const EncryptionKey = require('../models/EncryptionKey');
 const EncryptionEngine = require('../services/EncryptionEngine');
@@ -8,9 +9,14 @@ const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }
+});
+
 /**
  * POST /api/vault/store
- * Store data securely with context-aware encryption.
+ * Store text data securely with context-aware encryption.
  */
 router.post('/store', authenticate, async (req, res) => {
   try {
@@ -25,7 +31,6 @@ router.post('/store', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'sensitivityLevel must be LOW, MEDIUM, HIGH, or CRITICAL.' });
     }
 
-    // Step 1: Check access based on role
     const accessCheck = PolicyEngine.checkAccess(user.role, sensitivityLevel);
     if (!accessCheck.granted) {
       await AuditService.log({
@@ -41,7 +46,6 @@ router.post('/store', authenticate, async (req, res) => {
       return res.status(403).json({ error: accessCheck.message });
     }
 
-    // Step 2: Evaluate context to determine encryption strategy
     const context = {
       role: user.role,
       sensitivityLevel,
@@ -50,7 +54,6 @@ router.post('/store', authenticate, async (req, res) => {
     };
     const policyResult = PolicyEngine.evaluate(context);
 
-    // Log policy evaluation
     await AuditService.log({
       userId: user._id,
       username: user.username,
@@ -58,27 +61,17 @@ router.post('/store', authenticate, async (req, res) => {
       action: 'POLICY_EVALUATED',
       resource: title,
       details: `Policy score: ${policyResult.score}, Strategy: ${policyResult.strategy}`,
-      context: {
-        sensitivityLevel,
-        location: user.location,
-        encryptionStrategy: policyResult.strategy
-      }
+      context: { sensitivityLevel, location: user.location, encryptionStrategy: policyResult.strategy }
     });
 
-    // Step 3: Encrypt the data
     const encryptionResult = EncryptionEngine.encrypt(data, policyResult.strategy);
+    const wrappedKey = EncryptionEngine.wrapKey(encryptionResult.dataKey, process.env.MASTER_ENCRYPTION_KEY);
 
-    // Step 4: Wrap (encrypt) the data key with master key
-    const wrappedKey = EncryptionEngine.wrapKey(
-      encryptionResult.dataKey,
-      process.env.MASTER_ENCRYPTION_KEY
-    );
-
-    // Step 5: Store encrypted data in vault
     const vaultItem = new VaultItem({
       owner: user._id,
       title,
       sensitivityLevel,
+      fileType: 'text',
       encryptedData: encryptionResult.encryptedData,
       iv: encryptionResult.iv,
       authTag: encryptionResult.authTag,
@@ -98,7 +91,6 @@ router.post('/store', authenticate, async (req, res) => {
     });
     await vaultItem.save();
 
-    // Step 6: Store encryption key separately
     const encryptionKeyDoc = new EncryptionKey({
       vaultItem: vaultItem._id,
       owner: user._id,
@@ -109,29 +101,14 @@ router.post('/store', authenticate, async (req, res) => {
     });
     await encryptionKeyDoc.save();
 
-    // Log storage
     await AuditService.log({
       userId: user._id,
       username: user.username,
       role: user.role,
       action: 'STORE_DATA',
       resource: title,
-      details: `Data stored with ${policyResult.strategy} encryption (${encryptionResult.algorithm})`,
-      context: {
-        sensitivityLevel,
-        location: user.location,
-        encryptionStrategy: policyResult.strategy
-      }
-    });
-
-    await AuditService.log({
-      userId: user._id,
-      username: user.username,
-      role: user.role,
-      action: 'ENCRYPTION_APPLIED',
-      resource: title,
-      details: `${encryptionResult.algorithm} applied. Key wrapped and stored separately.`,
-      context: { encryptionStrategy: policyResult.strategy }
+      details: `Text data stored with ${policyResult.strategy} encryption`,
+      context: { sensitivityLevel, encryptionStrategy: policyResult.strategy }
     });
 
     res.status(201).json({
@@ -140,17 +117,143 @@ router.post('/store', authenticate, async (req, res) => {
         id: vaultItem._id,
         title: vaultItem.title,
         sensitivityLevel: vaultItem.sensitivityLevel,
+        fileType: 'text',
         encryptionStrategy: policyResult.strategy,
         algorithm: encryptionResult.algorithm,
-        policyEvaluation: {
-          score: policyResult.score,
-          reasons: policyResult.reasons
-        },
+        policyEvaluation: { score: policyResult.score, reasons: policyResult.reasons },
         storedAt: vaultItem.createdAt
       }
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to store data: ' + error.message });
+  }
+});
+
+/**
+ * POST /api/vault/store/pdf
+ * Store PDF file securely with context-aware encryption.
+ */
+router.post('/store/pdf', authenticate, upload.single('file'), async (req, res) => {
+  try {
+    const { title, sensitivityLevel } = req.body;
+    const user = req.user;
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({ error: 'PDF file is required.' });
+    }
+
+    if (file.mimetype !== 'application/pdf') {
+      return res.status(400).json({ error: 'Only PDF files are allowed.' });
+    }
+
+    if (!title || !sensitivityLevel) {
+      return res.status(400).json({ error: 'Title and sensitivityLevel are required.' });
+    }
+
+    if (!['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].includes(sensitivityLevel)) {
+      return res.status(400).json({ error: 'sensitivityLevel must be LOW, MEDIUM, HIGH, or CRITICAL.' });
+    }
+
+    const accessCheck = PolicyEngine.checkAccess(user.role, sensitivityLevel);
+    if (!accessCheck.granted) {
+      await AuditService.log({
+        userId: user._id,
+        username: user.username,
+        role: user.role,
+        action: 'ACCESS_DENIED',
+        resource: title,
+        details: accessCheck.message,
+        context: { sensitivityLevel, location: user.location },
+        success: false
+      });
+      return res.status(403).json({ error: accessCheck.message });
+    }
+
+    const context = {
+      role: user.role,
+      sensitivityLevel,
+      location: user.location,
+      timestamp: new Date().toISOString()
+    };
+    const policyResult = PolicyEngine.evaluate(context);
+
+    await AuditService.log({
+      userId: user._id,
+      username: user.username,
+      role: user.role,
+      action: 'POLICY_EVALUATED',
+      resource: title,
+      details: `PDF Policy score: ${policyResult.score}, Strategy: ${policyResult.strategy}`,
+      context: { sensitivityLevel, location: user.location, encryptionStrategy: policyResult.strategy }
+    });
+
+    const fileBuffer = file.buffer.toString('base64');
+    const encryptionResult = EncryptionEngine.encrypt(fileBuffer, policyResult.strategy);
+    const wrappedKey = EncryptionEngine.wrapKey(encryptionResult.dataKey, process.env.MASTER_ENCRYPTION_KEY);
+
+    const vaultItem = new VaultItem({
+      owner: user._id,
+      title,
+      sensitivityLevel,
+      fileType: 'pdf',
+      originalFileName: file.originalname,
+      encryptedData: encryptionResult.encryptedData,
+      iv: encryptionResult.iv,
+      authTag: encryptionResult.authTag,
+      encryptionStrategy: policyResult.strategy,
+      algorithm: encryptionResult.algorithm,
+      metadata: {
+        originalSize: file.size,
+        mimeType: file.mimetype,
+        encryptedAt: new Date(),
+        contextSnapshot: {
+          role: user.role,
+          location: user.location,
+          timeOfAccess: context.timestamp,
+          sensitivityLevel,
+          policyDecision: `${policyResult.strategy} (score: ${policyResult.score})`
+        }
+      }
+    });
+    await vaultItem.save();
+
+    const encryptionKeyDoc = new EncryptionKey({
+      vaultItem: vaultItem._id,
+      owner: user._id,
+      encryptedKey: wrappedKey.encryptedKey,
+      keyIv: wrappedKey.keyIv,
+      keyAuthTag: wrappedKey.keyAuthTag,
+      algorithm: encryptionResult.algorithm
+    });
+    await encryptionKeyDoc.save();
+
+    await AuditService.log({
+      userId: user._id,
+      username: user.username,
+      role: user.role,
+      action: 'STORE_DATA',
+      resource: title,
+      details: `PDF file stored with ${policyResult.strategy} encryption`,
+      context: { sensitivityLevel, encryptionStrategy: policyResult.strategy }
+    });
+
+    res.status(201).json({
+      message: 'PDF file stored securely',
+      vaultItem: {
+        id: vaultItem._id,
+        title: vaultItem.title,
+        originalFileName: vaultItem.originalFileName,
+        sensitivityLevel: vaultItem.sensitivityLevel,
+        fileType: 'pdf',
+        encryptionStrategy: policyResult.strategy,
+        algorithm: encryptionResult.algorithm,
+        policyEvaluation: { score: policyResult.score, reasons: policyResult.reasons },
+        storedAt: vaultItem.createdAt
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to store PDF: ' + error.message });
   }
 });
 
@@ -167,7 +270,6 @@ router.get('/retrieve/:id', authenticate, async (req, res) => {
       return res.status(404).json({ error: 'Vault item not found.' });
     }
 
-    // Check ownership (admin can access all)
     if (vaultItem.owner.toString() !== user._id.toString() && user.role !== 'admin') {
       await AuditService.log({
         userId: user._id,
@@ -181,7 +283,6 @@ router.get('/retrieve/:id', authenticate, async (req, res) => {
       return res.status(403).json({ error: 'Access denied. You can only access your own data.' });
     }
 
-    // Re-evaluate context for retrieval
     const accessCheck = PolicyEngine.checkAccess(user.role, vaultItem.sensitivityLevel);
     if (!accessCheck.granted) {
       await AuditService.log({
@@ -197,13 +298,11 @@ router.get('/retrieve/:id', authenticate, async (req, res) => {
       return res.status(403).json({ error: accessCheck.message });
     }
 
-    // Get the encryption key
     const keyDoc = await EncryptionKey.findOne({ vaultItem: vaultItem._id });
     if (!keyDoc) {
       return res.status(500).json({ error: 'Encryption key not found. Data cannot be decrypted.' });
     }
 
-    // Unwrap the data key
     const dataKeyHex = EncryptionEngine.unwrapKey(
       keyDoc.encryptedKey,
       keyDoc.keyIv,
@@ -211,7 +310,6 @@ router.get('/retrieve/:id', authenticate, async (req, res) => {
       process.env.MASTER_ENCRYPTION_KEY
     );
 
-    // Decrypt the data
     const decryptedData = EncryptionEngine.decrypt(
       vaultItem.encryptedData,
       dataKeyHex,
@@ -220,30 +318,22 @@ router.get('/retrieve/:id', authenticate, async (req, res) => {
       vaultItem.authTag
     );
 
-    // Audit logs
     await AuditService.log({
       userId: user._id,
       username: user.username,
       role: user.role,
       action: 'RETRIEVE_DATA',
       resource: vaultItem.title,
-      details: `Data retrieved and decrypted (${vaultItem.encryptionStrategy})`,
-      context: {
-        sensitivityLevel: vaultItem.sensitivityLevel,
-        location: user.location,
-        encryptionStrategy: vaultItem.encryptionStrategy
-      }
+      details: `${vaultItem.fileType === 'pdf' ? 'PDF file' : 'Data'} retrieved and decrypted`,
+      context: { sensitivityLevel: vaultItem.sensitivityLevel, encryptionStrategy: vaultItem.encryptionStrategy }
     });
 
-    await AuditService.log({
-      userId: user._id,
-      username: user.username,
-      role: user.role,
-      action: 'DECRYPTION_APPLIED',
-      resource: vaultItem.title,
-      details: `${vaultItem.algorithm} decryption applied`,
-      context: { encryptionStrategy: vaultItem.encryptionStrategy }
-    });
+    if (vaultItem.fileType === 'pdf') {
+      const pdfBuffer = Buffer.from(decryptedData, 'base64');
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${vaultItem.originalFileName}"`);
+      return res.send(pdfBuffer);
+    }
 
     res.json({
       message: 'Data retrieved and decrypted successfully',
@@ -251,6 +341,7 @@ router.get('/retrieve/:id', authenticate, async (req, res) => {
         id: vaultItem._id,
         title: vaultItem.title,
         sensitivityLevel: vaultItem.sensitivityLevel,
+        fileType: vaultItem.fileType,
         encryptionStrategy: vaultItem.encryptionStrategy,
         algorithm: vaultItem.algorithm,
         data: decryptedData,
@@ -265,14 +356,13 @@ router.get('/retrieve/:id', authenticate, async (req, res) => {
 
 /**
  * GET /api/vault/items
- * List all vault items for the current user (without decrypted data).
+ * List all vault items for the current user.
  */
 router.get('/items', authenticate, async (req, res) => {
   try {
     const user = req.user;
     let query = {};
 
-    // Admin can see all items, others see only their own
     if (user.role !== 'admin') {
       query.owner = user._id;
     }
@@ -299,7 +389,7 @@ router.get('/items', authenticate, async (req, res) => {
 
 /**
  * DELETE /api/vault/delete/:id
- * Delete a vault item (admin or owner only).
+ * Delete a vault item.
  */
 router.delete('/delete/:id', authenticate, async (req, res) => {
   try {
@@ -314,7 +404,6 @@ router.delete('/delete/:id', authenticate, async (req, res) => {
       return res.status(403).json({ error: 'Access denied. Only the owner or admin can delete.' });
     }
 
-    // Delete the encryption key first
     await EncryptionKey.deleteOne({ vaultItem: vaultItem._id });
     await VaultItem.findByIdAndDelete(req.params.id);
 

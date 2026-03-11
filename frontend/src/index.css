@@ -648,3 +648,39 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* ===== PDF Upload ===== */
+.upload-mode-toggle {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.file-input {
+  padding: 0.5rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  width: 100%;
+}
+
+.selected-file {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: rgba(76, 175, 80, 0.1);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  border-radius: 4px;
+  font-size: 0.875rem;
+  color: #81c784;
+}
+
+.file-type-badge {
+  display: inline-block;
+  padding: 0.15rem 0.4rem;
+  background: rgba(244, 67, 54, 0.2);
+  color: #e57373;
+  border-radius: 3px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}

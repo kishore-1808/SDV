@@ -1,7 +1,8 @@
 import axios from 'axios';
 
+const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 const API = axios.create({
-  baseURL: 'https://backend-one-blush-33.vercel.app/api',
+  baseURL: isLocalhost ? 'http://localhost:5000/api' : 'https://backend-one-blush-33.vercel.app/api',
 });
 
 // Attach token to every request
