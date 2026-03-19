@@ -2,7 +2,7 @@
  * Policy Engine - Evaluates access context to determine encryption strength.
  * 
  * Factors considered:
- *   1. User Role (admin, employee, guest)
+ *   1. User Role (admin, student, professor)
  *   2. Data Sensitivity Level (LOW, MEDIUM, HIGH, CRITICAL)
  *   3. Access Location (internal, external, remote)
  *   4. Time of Access (business hours vs off-hours)
@@ -11,18 +11,12 @@
  */
 
 class PolicyEngine {
-  /**
-   * Evaluate context and return the required encryption strategy.
-   * @param {Object} context - { role, sensitivityLevel, location, timestamp }
-   * @returns {Object} - { strategy, reason, score }
-   */
   static evaluate(context) {
     const { role, sensitivityLevel, location, timestamp } = context;
 
     let score = 0;
     const reasons = [];
 
-    // --- Factor 1: Data Sensitivity Level (highest weight) ---
     switch (sensitivityLevel) {
       case 'CRITICAL':
         score += 40;
@@ -45,15 +39,14 @@ class PolicyEngine {
         reasons.push('Unknown sensitivity, defaulting to MEDIUM (+20)');
     }
 
-    // --- Factor 2: User Role ---
     switch (role) {
-      case 'guest':
+      case 'professor':
         score += 20;
-        reasons.push('Guest role - higher encryption needed (+20)');
+        reasons.push('Professor role - higher encryption needed (+20)');
         break;
-      case 'employee':
+      case 'student':
         score += 10;
-        reasons.push('Employee role - standard encryption (+10)');
+        reasons.push('Student role - standard encryption (+10)');
         break;
       case 'admin':
         score += 5;
@@ -61,10 +54,9 @@ class PolicyEngine {
         break;
       default:
         score += 20;
-        reasons.push('Unknown role, treating as guest (+20)');
+        reasons.push('Unknown role, treating as professor (+20)');
     }
 
-    // --- Factor 3: Access Location ---
     switch (location) {
       case 'remote':
         score += 20;
@@ -83,7 +75,6 @@ class PolicyEngine {
         reasons.push('Unknown location, treating as external (+15)');
     }
 
-    // --- Factor 4: Time of Access ---
     const hour = timestamp ? new Date(timestamp).getHours() : new Date().getHours();
     if (hour >= 9 && hour <= 17) {
       score += 0;
@@ -96,7 +87,6 @@ class PolicyEngine {
       reasons.push('Off-hours access - suspicious (+15)');
     }
 
-    // --- Determine Encryption Strategy ---
     let strategy;
     if (score >= 60) {
       strategy = 'STRONG';
@@ -106,23 +96,14 @@ class PolicyEngine {
       strategy = 'BASIC';
     }
 
-    return {
-      strategy,
-      score,
-      reasons,
-      evaluatedAt: new Date().toISOString()
-    };
+    return { strategy, score, reasons, evaluatedAt: new Date().toISOString() };
   }
 
-  /**
-   * Check if a user role can access a given sensitivity level.
-   * Implements zero-trust access control.
-   */
   static checkAccess(role, sensitivityLevel) {
     const accessMatrix = {
       admin: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'],
-      employee: ['LOW', 'MEDIUM', 'HIGH'],
-      guest: ['LOW']
+      student: ['LOW', 'MEDIUM', 'HIGH'],
+      professor: ['LOW']
     };
 
     const allowed = accessMatrix[role] || [];

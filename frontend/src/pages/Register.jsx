@@ -8,7 +8,7 @@ export default function Register() {
     username: '',
     email: '',
     password: '',
-    role: 'guest',
+    role: 'student',
     location: 'external'
   });
   const [error, setError] = useState('');
@@ -77,8 +77,8 @@ export default function Register() {
                 value={form.role}
                 onChange={(e) => setForm({ ...form, role: e.target.value })}
               >
-                <option value="guest">Guest</option>
-                <option value="employee">Employee</option>
+                <option value="professor">Professor</option>
+                <option value="student">Student</option>
                 <option value="admin">Admin</option>
               </select>
             </div>

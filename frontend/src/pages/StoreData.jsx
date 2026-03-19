@@ -15,13 +15,15 @@ export default function StoreData() {
   const [uploadMode, setUploadMode] = useState('text');
   const fileInputRef = useRef(null);
 
+  if (!user) return <div className="loading">Loading...</div>;
+
   const accessLevels = {
     admin: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'],
-    employee: ['LOW', 'MEDIUM', 'HIGH'],
-    guest: ['LOW']
+    student: ['LOW', 'MEDIUM', 'HIGH'],
+    professor: ['LOW']
   };
 
-  const allowedLevels = accessLevels[user.role] || ['LOW'];
+  const allowedLevels = accessLevels[user?.role] || ['LOW'];
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];

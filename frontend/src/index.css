@@ -335,8 +335,8 @@ body {
 }
 
 .role-admin { background: rgba(156, 39, 176, 0.2); color: #ce93d8; }
-.role-employee { background: rgba(33, 150, 243, 0.2); color: #90caf9; }
-.role-guest { background: rgba(158, 158, 158, 0.2); color: #bdbdbd; }
+.role-student { background: rgba(33, 150, 243, 0.2); color: #90caf9; }
+.role-professor { background: rgba(158, 158, 158, 0.2); color: #bdbdbd; }
 
 .sensitivity-badges {
   display: flex;

@@ -31,8 +31,8 @@ export default function Dashboard() {
 
   const accessLevels = {
     admin: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'],
-    employee: ['LOW', 'MEDIUM', 'HIGH'],
-    guest: ['LOW']
+    student: ['LOW', 'MEDIUM', 'HIGH'],
+    professor: ['LOW']
   };
 
   if (loading) return <div className="loading">Loading dashboard...</div>;
@@ -122,7 +122,7 @@ export default function Dashboard() {
               <td><span className="strategy-badge strategy-standard">STANDARD</span></td>
               <td>AES-192-CBC</td>
               <td>192-bit</td>
-              <td>Medium-risk contexts (typical employee access)</td>
+              <td>Medium-risk contexts (typical student access)</td>
             </tr>
             <tr>
               <td><span className="strategy-badge strategy-strong">STRONG</span></td>
