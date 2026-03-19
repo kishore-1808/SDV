@@ -35,6 +35,46 @@ const userSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  loginAttempts: {
+    type: Number,
+    default: 0
+  },
+  lockUntil: {
+    type: Date,
+    default: null
+  },
+  ipWhitelist: [{
+    type: String
+  }],
+  twoFactorEnabled: {
+    type: Boolean,
+    default: false
+  },
+  twoFactorSecret: {
+    type: String,
+    default: null
+  },
+  twoFactorVerified: {
+    type: Boolean,
+    default: false
+  },
+  pendingOtp: {
+    type: String,
+    default: null
+  },
+  otpExpiresAt: {
+    type: Date,
+    default: null
+  },
+  preferredTheme: {
+    type: String,
+    enum: ['dark', 'light'],
+    default: 'dark'
+  },
+  inactivityTimeout: {
+    type: Number,
+    default: 30
   }
 }, { timestamps: true });
 
