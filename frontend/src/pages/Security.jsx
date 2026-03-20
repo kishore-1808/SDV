@@ -14,13 +14,6 @@ export default function Security() {
   const [ipWhitelist, setIpWhitelist] = useState('');
   const [activeTab, setActiveTab] = useState('security');
 
-  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '' });
-  const [showDisable2FA, setShowDisable2FA] = useState(false);
-  const [disablePassword, setDisablePassword] = useState('');
-  const [otpCode, setOtpCode] = useState('');
-  const [otpStep, setOtpStep] = useState('');
-  const [displayedOtp, setDisplayedOtp] = useState('');
-
   useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
@@ -58,71 +51,6 @@ export default function Security() {
       showSuccess('All other sessions revoked.');
       fetchData();
     } catch { setError('Failed.'); }
-  };
-
-  const handleEnable2FA = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_BASE}/advanced/enable-2fa`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setOtpStep('verify');
-      setOtpCode('');
-      setDisplayedOtp(data.otp);
-      showSuccess(`2FA OTP: ${data.otp}`);
-    } catch (err) { setError(err.message); }
-  };
-
-  const handleVerify2FA = async (e) => {
-    e.preventDefault();
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_BASE}/advanced/verify-2fa`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ otp: otpCode })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setOtpStep('');
-      setOtpCode('');
-      showSuccess('2FA enabled successfully!');
-      fetchData();
-    } catch (err) { setError(err.message); }
-  };
-
-  const handleDisable2FA = async (e) => {
-    e.preventDefault();
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_BASE}/advanced/disable-2fa`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: disablePassword })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setShowDisable2FA(false);
-      setDisablePassword('');
-      showSuccess('2FA disabled.');
-      fetchData();
-    } catch (err) { setError(err.message); }
-  };
-
-  const handleChangePassword = async (e) => {
-    e.preventDefault();
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_BASE}/advanced/change-password`, {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(passwordForm)
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setPasswordForm({ currentPassword: '', newPassword: '' });
-      showSuccess('Password changed successfully!');
-    } catch (err) { setError(err.message); }
   };
 
   const handleUpdateIp = async (e) => {
@@ -166,7 +94,7 @@ export default function Security() {
   return (
     <div className="page">
       <h1>Security Settings</h1>
-      <p className="subtitle">Manage 2FA, passwords, sessions, and preferences.</p>
+      <p className="subtitle">Manage sessions, IP restrictions, and preferences.</p>
       {error && <div className="error-msg">{error}</div>}
       {success && <div className="success-msg">{success}</div>}
 
@@ -181,56 +109,9 @@ export default function Security() {
           <div className="info-cards">
             <div className="info-card">
               <h3>Security Status</h3>
-              <div className="info-item"><strong>2FA Status:</strong> {settings?.twoFactorEnabled ? <span style={{ color: '#4caf50' }}> Enabled</span> : <span style={{ color: '#ff9800' }}> Disabled</span>}</div>
               <div className="info-item"><strong>Account:</strong> {settings?.isLocked ? <span style={{ color: '#f44336' }}> LOCKED</span> : <span style={{ color: '#4caf50' }}> Active</span>}</div>
             </div>
           </div>
-
-          <div className="section-divider" />
-          <h2>Two-Factor Authentication</h2>
-          {settings?.twoFactorEnabled ? (
-            <div>
-              <p>2FA is <strong style={{ color: '#4caf50' }}>enabled</strong>. You'll receive an OTP on the login page.</p>
-              {showDisable2FA ? (
-                <form onSubmit={handleDisable2FA} className="store-form" style={{ maxWidth: '400px' }}>
-                  <p>Enter your password to disable 2FA:</p>
-                  <input type="password" value={disablePassword} onChange={(e) => setDisablePassword(e.target.value)} placeholder="Your password" required style={{ width: '100%', padding: '0.5rem', marginBottom: '0.5rem', background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: '6px' }} />
-                  <button type="submit" className="btn btn-danger">Confirm Disable</button>
-                  <button type="button" className="btn btn-secondary" onClick={() => setShowDisable2FA(false)}>Cancel</button>
-                </form>
-              ) : (
-                <button className="btn btn-warning" onClick={() => setShowDisable2FA(true)}>Disable 2FA</button>
-              )}
-            </div>
-          ) : otpStep === 'verify' ? (
-            <form onSubmit={handleVerify2FA} className="store-form" style={{ maxWidth: '400px' }}>
-              <p>Your OTP is:</p>
-              <div style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', padding: '1rem', borderRadius: '8px', textAlign: 'center', fontSize: '1.8rem', fontFamily: 'monospace', letterSpacing: '0.5rem', color: 'var(--text)', marginBottom: '1rem', fontWeight: 'bold' }}>{displayedOtp}</div>
-              <p>Enter this OTP to verify:</p>
-              <input type="text" value={otpCode} onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="6-digit OTP" maxLength={6} required style={{ textAlign: 'center', fontSize: '1.5rem', letterSpacing: '0.5rem', width: '100%', padding: '0.5rem', marginBottom: '0.5rem', background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: '6px' }} />
-              <button type="submit" className="btn btn-primary" disabled={otpCode.length !== 6}>Verify & Enable</button>
-              <button type="button" className="btn btn-secondary" onClick={() => { setOtpStep(''); setOtpCode(''); setDisplayedOtp(''); }}>Cancel</button>
-            </form>
-          ) : (
-            <div>
-              <p>Enable 2FA for extra security. You'll receive an OTP on the login page.</p>
-              <button className="btn btn-primary" onClick={handleEnable2FA}>Enable 2FA</button>
-            </div>
-          )}
-
-          <div className="section-divider" />
-          <h2>Change Password</h2>
-          <form onSubmit={handleChangePassword} className="store-form" style={{ maxWidth: '400px' }}>
-            <div className="form-group">
-              <label>Current Password</label>
-              <input type="password" value={passwordForm.currentPassword} onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })} required />
-            </div>
-            <div className="form-group">
-              <label>New Password</label>
-              <input type="password" value={passwordForm.newPassword} onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })} required minLength={6} />
-            </div>
-            <button type="submit" className="btn btn-primary">Change Password</button>
-          </form>
 
           <div className="section-divider" />
           <h2>IP Whitelist</h2>

@@ -25,7 +25,7 @@ const userSchema = new mongoose.Schema({
   role: {
     type: String,
     enum: ['admin', 'student', 'professor'],
-    default: 'professor'
+    default: 'student'
   },
   location: {
     type: String,
@@ -47,26 +47,6 @@ const userSchema = new mongoose.Schema({
   ipWhitelist: [{
     type: String
   }],
-  twoFactorEnabled: {
-    type: Boolean,
-    default: false
-  },
-  twoFactorSecret: {
-    type: String,
-    default: null
-  },
-  twoFactorVerified: {
-    type: Boolean,
-    default: false
-  },
-  pendingOtp: {
-    type: String,
-    default: null
-  },
-  otpExpiresAt: {
-    type: Date,
-    default: null
-  },
   preferredTheme: {
     type: String,
     enum: ['dark', 'light'],

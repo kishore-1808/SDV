@@ -1,5 +1,4 @@
 const express = require('express');
-const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const VaultItem = require('../models/VaultItem');
@@ -39,181 +38,6 @@ function isIpAllowed(userIp, whitelist) {
   if (!whitelist || whitelist.length === 0) return true;
   return whitelist.some(entry => ipMatches(userIp, entry));
 }
-
-function generateOTP() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
-// ========== 2FA Routes ==========
-
-router.post('/enable-2fa', authenticate, async (req, res) => {
-  try {
-    const otp = generateOTP();
-    const user = await User.findById(req.user._id);
-    user.pendingOtp = otp;
-    user.otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
-    await user.save();
-
-    await AuditService.log({
-      userId: user._id, username: user.username, role: user.role,
-      action: '2FA_ENABLE_REQUESTED', details: '2FA setup requested'
-    });
-
-    res.json({ message: 'OTP generated. Verify to enable 2FA.', expiresIn: 300, otp });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-router.post('/verify-2fa', authenticate, async (req, res) => {
-  try {
-    const { otp } = req.body;
-    const user = await User.findById(req.user._id);
-    
-    if (!user.pendingOtp || new Date() > user.otpExpiresAt) {
-      return res.status(400).json({ error: 'OTP expired or not requested. Please request again.' });
-    }
-    if (user.pendingOtp !== otp) {
-      return res.status(400).json({ error: 'Invalid OTP.' });
-    }
-
-    user.twoFactorEnabled = true;
-    user.twoFactorVerified = true;
-    user.pendingOtp = null;
-    user.otpExpiresAt = null;
-    await user.save();
-
-    await AuditService.log({
-      userId: user._id, username: user.username, role: user.role,
-      action: '2FA_ENABLED', details: '2FA successfully enabled'
-    });
-
-    res.json({ message: '2FA enabled successfully!' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-router.post('/disable-2fa', authenticate, async (req, res) => {
-  try {
-    const { password } = req.body;
-    const user = await User.findById(req.user._id);
-    
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res.status(401).json({ error: 'Incorrect password.' });
-    }
-
-    user.twoFactorEnabled = false;
-    user.twoFactorVerified = false;
-    await user.save();
-
-    await AuditService.log({
-      userId: user._id, username: user.username, role: user.role,
-      action: '2FA_DISABLED', details: '2FA disabled by user'
-    });
-
-    res.json({ message: '2FA disabled.' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-router.post('/verify-login-otp', async (req, res) => {
-  try {
-    const { email, otp, tempToken } = req.body;
-    
-    if (!email || !otp || !tempToken) {
-      return res.status(400).json({ error: 'Email, OTP, and tempToken required.' });
-    }
-
-    let decoded;
-    try {
-      decoded = jwt.verify(tempToken, process.env.JWT_SECRET);
-    } catch {
-      return res.status(401).json({ error: 'Temp token expired. Please login again.' });
-    }
-
-    const user = await User.findById(decoded.id);
-    if (!user) return res.status(401).json({ error: 'User not found.' });
-
-    if (!user.twoFactorEnabled) {
-      return res.status(400).json({ error: '2FA not enabled for this account.' });
-    }
-
-    if (!user.pendingOtp || new Date() > user.otpExpiresAt) {
-      return res.status(400).json({ error: 'OTP expired. Please login again.' });
-    }
-
-    if (user.pendingOtp !== otp) {
-      return res.status(401).json({ error: 'Invalid OTP.' });
-    }
-
-    user.pendingOtp = null;
-    user.otpExpiresAt = null;
-    user.loginAttempts = 0;
-    user.lockUntil = null;
-    await user.save();
-
-    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '24h' });
-
-    const loginHistory = new LoginHistory({
-      user: user._id,
-      ipAddress: req.ip || 'unknown',
-      userAgent: req.headers['user-agent'] || 'unknown',
-      deviceType: getDeviceType(req.headers['user-agent']),
-      loginTime: new Date(),
-      status: 'success'
-    });
-    await loginHistory.save();
-
-    await AuditService.log({
-      userId: user._id, username: user.username, role: user.role,
-      action: 'LOGIN', details: 'Login successful with 2FA', context: { ip: req.ip }
-    });
-
-    res.json({
-      message: 'Login successful',
-      token,
-      user: { id: user._id, username: user.username, email: user.email, role: user.role, location: user.location }
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ========== Password Change ==========
-
-router.put('/change-password', authenticate, async (req, res) => {
-  try {
-    const { currentPassword, newPassword } = req.body;
-    
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: 'Current and new password required.' });
-    }
-    if (newPassword.length < 6) {
-      return res.status(400).json({ error: 'New password must be at least 6 characters.' });
-    }
-
-    const user = await User.findById(req.user._id);
-    const isMatch = await user.comparePassword(currentPassword);
-    if (!isMatch) {
-      return res.status(401).json({ error: 'Current password is incorrect.' });
-    }
-
-    user.password = newPassword;
-    await user.save();
-
-    await AuditService.log({
-      userId: user._id, username: user.username, role: user.role,
-      action: 'PASSWORD_CHANGED', details: 'Password changed successfully'
-    });
-
-    res.json({ message: 'Password changed successfully.' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 // ========== Login History ==========
 
@@ -258,11 +82,10 @@ router.put('/settings', authenticate, async (req, res) => {
 
 router.get('/settings', authenticate, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select('preferredTheme inactivityTimeout twoFactorEnabled');
+    const user = await User.findById(req.user._id).select('preferredTheme inactivityTimeout');
     res.json({
       preferredTheme: user.preferredTheme,
-      inactivityTimeout: user.inactivityTimeout,
-      twoFactorEnabled: user.twoFactorEnabled
+      inactivityTimeout: user.inactivityTimeout
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
